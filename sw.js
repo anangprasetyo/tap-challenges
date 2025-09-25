@@ -3,12 +3,12 @@ const CACHE_VERSION = 'v1.0.0';
 const APP_CACHE = `tap-cache-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.webmanifest',
-  '/sw.js',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './sw.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
