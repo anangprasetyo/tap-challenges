@@ -362,7 +362,7 @@
   function endGame(){ state.running = false; showEndDialog(); }
   function resetGame(){
     state.running = false;
-    state.timeLeft = 60_000; state.score = 0; state.combo = 1; state.lives = 3;
+    state.timeLeft = 60_000; state.score = 0; state.combo = 1; state.lives = 10;
     state.circles.length = 0; state.particles.length = 0;
     state.spawnInterval = 900; state.spawnTimer = 0; state.levelTimer = 0;
     flashAlpha = 0;
