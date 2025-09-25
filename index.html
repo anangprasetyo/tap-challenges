@@ -4,11 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>Tap Challenge – Tablet</title>
-  <link rel="manifest" href="./manifest.webmanifest" />
-  <meta name="theme-color" content="#0f1222" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <style>
     :root {
       --bg: #0f1222;
@@ -70,6 +65,12 @@
     .bad { color: #fecaca; }
     .good { color: #bbf7d0; }
   </style>
+  <!-- PWA manifest & iOS meta -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0f1222" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 </head>
 <body>
   <div class="wrap">
@@ -77,7 +78,7 @@
       <div class="left">
         <div class="stat"><span>Score</span> <b id="score">0</b></div>
         <div class="stat"><span>Combo</span> <b id="combo">x1</b></div>
-        <div class="stat"><span>Lives</span> <b id="lives">❤❤❤</b></div>
+        <div class="stat"><span>Lives</span> <b id="lives">❤❤❤❤❤❤❤❤❤❤</b></div>
       </div>
       <div class="center">
         <span class="badge">Time: <b id="time">60.0s</b></span>
@@ -106,24 +107,25 @@
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.floor(rect.width * dpr);
     canvas.height = Math.floor((window.innerHeight - rect.top - 90) * dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.setTransform(dpr,0,0,dpr,0,0); // draw in CSS pixels
   }
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
+  // Game state
   const state = {
     running: false,
-    timeLeft: 60000,
+    timeLeft: 60_000, // ms
     score: 0,
     combo: 1,
     comboTimer: 0,
-    comboWindow: 600,
-    lives: 3,
+    comboWindow: 600, // ms window to chain combos
+    lives: 10,
     lastTS: 0,
     circles: [],
     particles: [],
     spawnTimer: 0,
-    spawnInterval: 900,
+    spawnInterval: 900, // ms, decreases over time
     levelTimer: 0,
     difficulty: 'Normal',
   };
@@ -138,8 +140,10 @@
     pauseBtn: document.getElementById('pauseBtn'),
     resetBtn: document.getElementById('resetBtn'),
   };
+
   ui.mode.textContent = state.difficulty;
 
+  // Sounds (WebAudio minimal beeps)
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   let audioCtx;
   function beep(freq=880, dur=0.06, type='sine', vol=0.2){
@@ -152,19 +156,17 @@
       o.connect(g); g.connect(audioCtx.destination);
       o.start();
       setTimeout(()=>{ o.stop(); }, dur*1000);
-    }catch{}
+    }catch{ /* ignore if blocked */ }
   }
 
-  function rand(a,b){ return a + Math.random()*(b-a); }
-  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
-
+  // Entities
   function spawnCircle(){
     const rMin = 26, rMax = 56;
     const r = rand(rMin, rMax);
     const margin = r + 10;
     const x = rand(margin, canvas.clientWidth - margin);
     const y = rand(margin, canvas.clientHeight - margin);
-    const life = rand(900, 1600) * Math.max(0.6, state.timeLeft/60000);
+    const life = rand(900, 1600) * Math.max(0.6, state.timeLeft/60000); // shorter later
     const hue = Math.floor(rand(180, 300));
     state.circles.push({x,y,r, born: performance.now(), life, hue, hit:false});
   }
@@ -178,13 +180,20 @@
     }
   }
 
+  // Utilities
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+
+  // Input
   function handlePoint(px, py){
+    // find top-most hittable circle under point
     for(let i=state.circles.length-1;i>=0;i--){
       const c = state.circles[i];
       const dx = px - c.x; const dy = py - c.y;
       if(dx*dx + dy*dy <= c.r*c.r){
         if(!c.hit){
-          c.hit = true;
+          c.hit = true; // mark to remove in update
+          // scoring
           const now = performance.now();
           if(now - state.comboTimer <= state.comboWindow){
             state.combo = clamp(state.combo+1, 1, 9);
@@ -198,18 +207,21 @@
           spawnParticles(c.x, c.y, c.hue);
           beep(600 + state.combo*60, 0.05, 'triangle', 0.15);
         }
-        return;
+        return; // only one circle per tap
       }
     }
+    // miss
     state.lives -= 1;
     state.combo = 1;
     beep(200, 0.08, 'sawtooth', 0.1);
     flashScreen('#ef444440');
   }
 
+  // Visual feedback flash
   let flashAlpha = 0; let flashColor = '#fff';
   function flashScreen(color){ flashColor = color; flashAlpha = 1; }
 
+  // Event listeners (touch + mouse)
   function canvasPointFromEvent(e){
     const rect = canvas.getBoundingClientRect();
     const points = [];
@@ -226,12 +238,14 @@
   canvas.addEventListener('touchstart', (e)=>{ if(!state.running) return; e.preventDefault(); for(const p of canvasPointFromEvent(e)) handlePoint(p.x, p.y); }, {passive:false});
   canvas.addEventListener('mousedown', (e)=>{ if(!state.running) return; for(const p of canvasPointFromEvent(e)) handlePoint(p.x, p.y); });
 
+  // Game loop
   function update(dt){
     if(!state.running) return;
 
-    state.timeLeft -= dt; state.levelTimer += dt; state.spawnTimer += dt;
+    state.timeLeft -= dt; state.levelTimer += dt; state.spawnTimer += dt; state.comboTimer += 0; // noop for clarity
 
-    if(state.levelTimer >= 10000){
+    // Difficulty scaling: every 10s faster spawns, shorter life
+    if(state.levelTimer >= 10_000){
       state.levelTimer = 0;
       state.spawnInterval = Math.max(360, state.spawnInterval - 90);
     }
@@ -240,6 +254,7 @@
       state.spawnTimer = 0; spawnCircle();
     }
 
+    // Update circles (lifetime and removal)
     const now = performance.now();
     for(let i=state.circles.length-1;i>=0;i--){
       const c = state.circles[i];
@@ -249,6 +264,7 @@
         continue;
       }
       if(age > c.life){
+        // expired -> lose life
         state.circles.splice(i,1);
         state.lives -= 1;
         state.combo = 1;
@@ -257,16 +273,19 @@
       }
     }
 
+    // Update particles
     for(let i=state.particles.length-1;i>=0;i--){
       const p = state.particles[i];
       p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.age += dt;
       if(p.age > p.life) state.particles.splice(i,1);
     }
 
+    // Game over conditions
     if(state.lives <= 0 || state.timeLeft <= 0){
       endGame();
     }
 
+    // UI sync
     ui.score.textContent = state.score;
     ui.combo.textContent = 'x' + state.combo;
     ui.lives.textContent = '❤'.repeat(Math.max(0,state.lives));
@@ -274,36 +293,45 @@
   }
 
   function draw(){
+    // clear
     ctx.clearRect(0,0,canvas.clientWidth, canvas.clientHeight);
 
+    // Circles
     const now = performance.now();
     for(const c of state.circles){
       const age = now - c.born;
       const pct = clamp(1 - age / c.life, 0, 1);
       const glow = 8 + 16*pct;
+      // glow
       const grad = ctx.createRadialGradient(c.x, c.y, Math.max(1,c.r*0.2), c.x, c.y, c.r+glow);
       grad.addColorStop(0, `hsla(${c.hue}, 95%, 70%, 0.9)`);
       grad.addColorStop(1, `hsla(${c.hue}, 95%, 60%, 0.0)`);
       ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(c.x, c.y, c.r+glow, 0, Math.PI*2); ctx.fill();
+      // body
       ctx.fillStyle = `hsla(${c.hue}, 95%, ${60 + pct*10}%, 0.95)`; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.fill();
+      // ring
       ctx.lineWidth = 3; ctx.strokeStyle = `hsla(${c.hue+20}, 95%, 85%, ${0.8*pct+0.2})`; ctx.stroke();
+      // timer arc
       ctx.beginPath(); ctx.strokeStyle = `hsla(${c.hue-40}, 95%, 65%, 0.9)`; ctx.lineWidth = 4;
       ctx.arc(c.x, c.y, c.r+6, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
       ctx.stroke();
     }
 
+    // Particles
     for(const p of state.particles){
       const a = 1 - p.age / p.life;
       ctx.fillStyle = `hsla(${p.hue}, 95%, 70%, ${a})`;
       ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
     }
 
+    // Flash overlay
     if(flashAlpha > 0){
       ctx.fillStyle = flashColor;
       ctx.fillRect(0,0,canvas.clientWidth, canvas.clientHeight);
       flashAlpha -= 0.06;
     }
 
+    // Messages if paused or not running
     if(!state.running){
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.font = '700 28px system-ui, -apple-system, Segoe UI, Roboto';
@@ -334,45 +362,49 @@
   function endGame(){ state.running = false; showEndDialog(); }
   function resetGame(){
     state.running = false;
-    state.timeLeft = 60000; state.score = 0; state.combo = 1; state.lives = 3;
+    state.timeLeft = 60_000; state.score = 0; state.combo = 1; state.lives = 3;
     state.circles.length = 0; state.particles.length = 0;
     state.spawnInterval = 900; state.spawnTimer = 0; state.levelTimer = 0;
     flashAlpha = 0;
   }
 
+  // Simple end dialog (non-blocking)
   function showEndDialog(){
     const high = Number(localStorage.getItem('tap_highscore')||'0');
     const newHigh = Math.max(high, state.score);
     localStorage.setItem('tap_highscore', String(newHigh));
     const msg = `Game Over!\n\nScore: ${state.score}\nHigh Score: ${newHigh}\n\nTap Start untuk bermain lagi.`;
+    // Non-blocking HUD flash
     flashScreen('#00000066');
     setTimeout(()=>{ alert(msg); }, 60);
   }
 
+  // Buttons
   ui.startBtn.addEventListener('click', startGame);
   ui.pauseBtn.addEventListener('click', pauseGame);
   ui.resetBtn.addEventListener('click', ()=>{ resetGame(); resizeCanvas(); });
 
+  // Fullscreen on double-tap for tablets
   let lastTap = 0;
-  const requestFS = () => {
-    const el = document.documentElement;
-    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-    if(req) req.call(el);
-  };
   canvas.addEventListener('touchend', ()=>{
     const now = Date.now();
-    if(now - lastTap < 300){ requestFS(); }
+    if(now - lastTap < 300){
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if(req) req.call(el);
+    }
     lastTap = now;
   });
 
+  // Prevent scroll bounce on iOS
   document.addEventListener('gesturestart', e=> e.preventDefault());
   </script>
-
-  <!-- PWA: register service worker -->
+  
+  <!-- Register Service Worker for PWA -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
+        navigator.serviceWorker.register('/sw.js')
           .then(reg => console.log('SW registered:', reg.scope))
           .catch(err => console.warn('SW registration failed:', err));
       });
