@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Tap Challenge – Tablet</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0f1222" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <style>
+    :root {
+      --bg: #0f1222;
+      --panel: #171a2b;
+      --accent: #6ee7ff;
+      --accent2: #a78bfa;
+      --good: #22c55e;
+      --bad: #ef4444;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --shadow: 0 10px 25px rgba(0,0,0,0.35);
+    }
+    html, body {
+      margin: 0; height: 100%; background: radial-gradient(1200px 800px at 70% 10%, #1a1f3b, #0b0e1b) fixed var(--bg);
+      color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      overscroll-behavior: none;
+      -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+    }
+    .wrap {
+      display: grid; grid-template-rows: auto 1fr auto; height: 100%;
+      max-width: 1100px; margin: 0 auto; padding: 10px 12px 14px;
+      gap: 10px;
+    }
+    .hud {
+      display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+      gap: 10px; padding: 10px 14px; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; box-shadow: var(--shadow);
+    }
+    .hud .left, .hud .right { display:flex; gap:12px; align-items:center; flex-wrap: wrap; }
+    .hud .center { text-align:center; }
+    .stat { background: var(--panel); padding: 6px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); }
+    .stat b { font-size: 1.05rem; }
+    .btnbar { display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap: wrap; }
+    button {
+      background: linear-gradient(180deg, #2a2f51, #1d2140);
+      border: 1px solid rgba(255,255,255,0.12); color: var(--text);
+      padding: 10px 16px; border-radius: 14px; font-size: 1rem; font-weight:600; box-shadow: var(--shadow);
+      touch-action: manipulation;
+    }
+    button.primary { background: linear-gradient(180deg, #3b82f6, #2563eb); border-color: #60a5fa; }
+    button.secondary { background: linear-gradient(180deg, #10b981, #059669); border-color: #34d399; }
+    button.warn { background: linear-gradient(180deg, #ef4444, #b91c1c); border-color: #f87171; }
+    button:active { transform: scale(0.98); }
+
+    canvas { width: 100%; height: 100%; background: radial-gradient(800px 600px at 50% 30%, rgba(110,231,255,0.08), rgba(167,139,250,0.06)),
+                                     radial-gradient(600px 500px at 30% 70%, rgba(167,139,250,0.06), rgba(110,231,255,0.03));
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; box-shadow: var(--shadow);
+      touch-action: none;
+    }
+
+    .footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; opacity:0.9; }
+    .tips { font-size: 0.95rem; color: var(--muted); }
+
+    .badge {
+      padding: 6px 10px; border-radius: 999px; border:1px solid rgba(255,255,255,0.1);
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+      font-weight: 600; letter-spacing: .2px;
+    }
+    .bad { color: #fecaca; }
+    .good { color: #bbf7d0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div class="left">
+        <div class="stat"><span>Score</span> <b id="score">0</b></div>
+        <div class="stat"><span>Combo</span> <b id="combo">x1</b></div>
+        <div class="stat"><span>Lives</span> <b id="lives">❤❤❤</b></div>
+      </div>
+      <div class="center">
+        <span class="badge">Time: <b id="time">60.0s</b></span>
+      </div>
+      <div class="right btnbar">
+        <button id="startBtn" class="primary">Start</button>
+        <button id="pauseBtn" class="secondary">Pause</button>
+        <button id="resetBtn" class="warn">Reset</button>
+      </div>
+    </div>
+
+    <canvas id="game"></canvas>
+
+    <div class="footer">
+      <div class="tips">💡 Tips: Tap lingkaran bercahaya sebelum hilang. Cepat berturut-turut untuk <b>combo</b> dan skor lebih besar!</div>
+      <div class="badge">Mode: <span id="mode">Normal</span></div>
+    </div>
+  </div>
+
+  <script>
+  // Hi-DPI Canvas setup
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  function resizeCanvas(){
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor((window.innerHeight - rect.top - 90) * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  const state = {
+    running: false,
+    timeLeft: 60000,
+    score: 0,
+    combo: 1,
+    comboTimer: 0,
+    comboWindow: 600,
+    lives: 3,
+    lastTS: 0,
+    circles: [],
+    particles: [],
+    spawnTimer: 0,
+    spawnInterval: 900,
+    levelTimer: 0,
+    difficulty: 'Normal',
+  };
+
+  const ui = {
+    score: document.getElementById('score'),
+    combo: document.getElementById('combo'),
+    lives: document.getElementById('lives'),
+    time: document.getElementById('time'),
+    mode: document.getElementById('mode'),
+    startBtn: document.getElementById('startBtn'),
+    pauseBtn: document.getElementById('pauseBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+  };
+  ui.mode.textContent = state.difficulty;
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let audioCtx;
+  function beep(freq=880, dur=0.06, type='sine', vol=0.2){
+    try{
+      audioCtx = audioCtx || new AudioCtx();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type; o.frequency.value = freq;
+      g.gain.value = vol;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start();
+      setTimeout(()=>{ o.stop(); }, dur*1000);
+    }catch{}
+  }
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+
+  function spawnCircle(){
+    const rMin = 26, rMax = 56;
+    const r = rand(rMin, rMax);
+    const margin = r + 10;
+    const x = rand(margin, canvas.clientWidth - margin);
+    const y = rand(margin, canvas.clientHeight - margin);
+    const life = rand(900, 1600) * Math.max(0.6, state.timeLeft/60000);
+    const hue = Math.floor(rand(180, 300));
+    state.circles.push({x,y,r, born: performance.now(), life, hue, hit:false});
+  }
+
+  function spawnParticles(x,y,baseHue){
+    for(let i=0;i<10;i++){
+      state.particles.push({
+        x, y, vx: (Math.random()-0.5)*5, vy:(Math.random()-0.5)*5,
+        life: 400 + Math.random()*300, age:0, hue: baseHue + (Math.random()*40-20)
+      });
+    }
+  }
+
+  function handlePoint(px, py){
+    for(let i=state.circles.length-1;i>=0;i--){
+      const c = state.circles[i];
+      const dx = px - c.x; const dy = py - c.y;
+      if(dx*dx + dy*dy <= c.r*c.r){
+        if(!c.hit){
+          c.hit = true;
+          const now = performance.now();
+          if(now - state.comboTimer <= state.comboWindow){
+            state.combo = clamp(state.combo+1, 1, 9);
+          } else {
+            state.combo = 1;
+          }
+          state.comboTimer = now;
+          const base = 10 + Math.round((1 - (now - c.born)/c.life) * 10);
+          const gained = base * state.combo;
+          state.score += gained;
+          spawnParticles(c.x, c.y, c.hue);
+          beep(600 + state.combo*60, 0.05, 'triangle', 0.15);
+        }
+        return;
+      }
+    }
+    state.lives -= 1;
+    state.combo = 1;
+    beep(200, 0.08, 'sawtooth', 0.1);
+    flashScreen('#ef444440');
+  }
+
+  let flashAlpha = 0; let flashColor = '#fff';
+  function flashScreen(color){ flashColor = color; flashAlpha = 1; }
+
+  function canvasPointFromEvent(e){
+    const rect = canvas.getBoundingClientRect();
+    const points = [];
+    if(e.touches){
+      for(const t of e.changedTouches){
+        points.push({ x: t.clientX - rect.left, y: t.clientY - rect.top });
+      }
+    } else {
+      points.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    }
+    return points;
+  }
+
+  canvas.addEventListener('touchstart', (e)=>{ if(!state.running) return; e.preventDefault(); for(const p of canvasPointFromEvent(e)) handlePoint(p.x, p.y); }, {passive:false});
+  canvas.addEventListener('mousedown', (e)=>{ if(!state.running) return; for(const p of canvasPointFromEvent(e)) handlePoint(p.x, p.y); });
+
+  function update(dt){
+    if(!state.running) return;
+
+    state.timeLeft -= dt; state.levelTimer += dt; state.spawnTimer += dt;
+
+    if(state.levelTimer >= 10000){
+      state.levelTimer = 0;
+      state.spawnInterval = Math.max(360, state.spawnInterval - 90);
+    }
+
+    if(state.spawnTimer >= state.spawnInterval){
+      state.spawnTimer = 0; spawnCircle();
+    }
+
+    const now = performance.now();
+    for(let i=state.circles.length-1;i>=0;i--){
+      const c = state.circles[i];
+      const age = now - c.born;
+      if(c.hit){
+        state.circles.splice(i,1);
+        continue;
+      }
+      if(age > c.life){
+        state.circles.splice(i,1);
+        state.lives -= 1;
+        state.combo = 1;
+        flashScreen('#f59e0b33');
+        beep(260, 0.06, 'square', 0.12);
+      }
+    }
+
+    for(let i=state.particles.length-1;i>=0;i--){
+      const p = state.particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.age += dt;
+      if(p.age > p.life) state.particles.splice(i,1);
+    }
+
+    if(state.lives <= 0 || state.timeLeft <= 0){
+      endGame();
+    }
+
+    ui.score.textContent = state.score;
+    ui.combo.textContent = 'x' + state.combo;
+    ui.lives.textContent = '❤'.repeat(Math.max(0,state.lives));
+    ui.time.textContent = (Math.max(0,state.timeLeft)/1000).toFixed(1) + 's';
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.clientWidth, canvas.clientHeight);
+
+    const now = performance.now();
+    for(const c of state.circles){
+      const age = now - c.born;
+      const pct = clamp(1 - age / c.life, 0, 1);
+      const glow = 8 + 16*pct;
+      const grad = ctx.createRadialGradient(c.x, c.y, Math.max(1,c.r*0.2), c.x, c.y, c.r+glow);
+      grad.addColorStop(0, `hsla(${c.hue}, 95%, 70%, 0.9)`);
+      grad.addColorStop(1, `hsla(${c.hue}, 95%, 60%, 0.0)`);
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(c.x, c.y, c.r+glow, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = `hsla(${c.hue}, 95%, ${60 + pct*10}%, 0.95)`; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = `hsla(${c.hue+20}, 95%, 85%, ${0.8*pct+0.2})`; ctx.stroke();
+      ctx.beginPath(); ctx.strokeStyle = `hsla(${c.hue-40}, 95%, 65%, 0.9)`; ctx.lineWidth = 4;
+      ctx.arc(c.x, c.y, c.r+6, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
+      ctx.stroke();
+    }
+
+    for(const p of state.particles){
+      const a = 1 - p.age / p.life;
+      ctx.fillStyle = `hsla(${p.hue}, 95%, 70%, ${a})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+    }
+
+    if(flashAlpha > 0){
+      ctx.fillStyle = flashColor;
+      ctx.fillRect(0,0,canvas.clientWidth, canvas.clientHeight);
+      flashAlpha -= 0.06;
+    }
+
+    if(!state.running){
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = '700 28px system-ui, -apple-system, Segoe UI, Roboto';
+      ctx.textAlign = 'center';
+      ctx.fillText('Tap Challenge', canvas.clientWidth/2, canvas.clientHeight/2 - 10);
+      ctx.font = '400 16px system-ui';
+      ctx.fillText('Tekan Start untuk bermain. Tap lingkaran bercahaya!', canvas.clientWidth/2, canvas.clientHeight/2 + 20);
+    }
+  }
+
+  function loop(ts){
+    if(!state.lastTS) state.lastTS = ts;
+    const dt = ts - state.lastTS; state.lastTS = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function startGame(){
+    if(state.running) return;
+    if(state.timeLeft <= 0 || state.lives <= 0){
+      resetGame();
+    }
+    state.running = true;
+  }
+  function pauseGame(){ state.running = false; }
+  function endGame(){ state.running = false; showEndDialog(); }
+  function resetGame(){
+    state.running = false;
+    state.timeLeft = 60000; state.score = 0; state.combo = 1; state.lives = 3;
+    state.circles.length = 0; state.particles.length = 0;
+    state.spawnInterval = 900; state.spawnTimer = 0; state.levelTimer = 0;
+    flashAlpha = 0;
+  }
+
+  function showEndDialog(){
+    const high = Number(localStorage.getItem('tap_highscore')||'0');
+    const newHigh = Math.max(high, state.score);
+    localStorage.setItem('tap_highscore', String(newHigh));
+    const msg = `Game Over!\n\nScore: ${state.score}\nHigh Score: ${newHigh}\n\nTap Start untuk bermain lagi.`;
+    flashScreen('#00000066');
+    setTimeout(()=>{ alert(msg); }, 60);
+  }
+
+  ui.startBtn.addEventListener('click', startGame);
+  ui.pauseBtn.addEventListener('click', pauseGame);
+  ui.resetBtn.addEventListener('click', ()=>{ resetGame(); resizeCanvas(); });
+
+  let lastTap = 0;
+  const requestFS = () => {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if(req) req.call(el);
+  };
+  canvas.addEventListener('touchend', ()=>{
+    const now = Date.now();
+    if(now - lastTap < 300){ requestFS(); }
+    lastTap = now;
+  });
+
+  document.addEventListener('gesturestart', e=> e.preventDefault());
+  </script>
+
+  <!-- PWA: register service worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.warn('SW registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
