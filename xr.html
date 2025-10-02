@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>WebXR AR – Tap Challenge</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto}
+    .topbar{position:fixed;left:0;right:0;top:0;display:flex;gap:8px;align-items:center;padding:8px 10px;z-index:10}
+    .chip{background:rgba(255,255,255,.08);backdrop-filter:saturate(140%) blur(6px);color:#e5e7eb;border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:8px 12px;font-weight:600}
+    .btn{cursor:pointer}
+    .hint{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;background:rgba(0,0,0,.45);color:#e5e7eb;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:8px 12px;font-size:14px}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a class="chip btn" href="./index.html">← Back</a>
+    <span class="chip">WebXR AR Mode</span>
+    <span id="status" class="chip" style="opacity:.9">Checking WebXR…</span>
+  </div>
+  <div class="hint">Tip: Arahkan kamera ke permukaan datar. Tap untuk menaruh bola.</div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js';
+    import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/webxr/ARButton.js';
+
+    if (!navigator.xr) {
+      document.getElementById('status').textContent = 'WebXR tidak tersedia';
+    }
+
+    let renderer, scene, camera, reticle, controller, hitTestSource = null, hitTestReady = false;
+
+    init();
+
+    function init(){
+      renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+      renderer.setPixelRatio(Math.max(1, window.devicePixelRatio||1));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 20);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0); scene.add(hemi);
+
+      reticle = new THREE.Mesh(
+        new THREE.RingGeometry(0.07, 0.08, 32).rotateX(-Math.PI/2),
+        new THREE.MeshBasicMaterial({ color: 0x6ee7ff })
+      );
+      reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
+
+      controller = renderer.xr.getController(0);
+      controller.addEventListener('select', onSelect);
+      scene.add(controller);
+
+      const btn = ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] });
+      document.body.appendChild(btn);
+      document.getElementById('status').textContent = 'Ready';
+
+      renderer.setAnimationLoop(render);
+      window.addEventListener('resize', ()=>{
+        renderer.setSize(innerWidth, innerHeight);
+      });
+    }
+
+    function onSelect(){
+      if(!reticle.visible) return;
+      const geo = new THREE.SphereGeometry(0.05, 24, 24);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xa78bfa, metalness:0.2, roughness:0.6 });
+      const obj = new THREE.Mesh(geo, mat);
+      obj.position.setFromMatrixPosition(reticle.matrix);
+      obj.castShadow = false; obj.receiveShadow = false;
+      scene.add(obj);
+    }
+
+    function render(time, frame){
+      const session = renderer.xr.getSession();
+      if(frame){
+        if(!hitTestSource){
+          session.requestReferenceSpace('viewer').then((refSpace)=>{
+            session.requestHitTestSource({ space: refSpace }).then((src)=>{
+              hitTestSource = src; hitTestReady = true;
+            });
+          });
+        }
+        if(hitTestReady){
+          const refSpace = renderer.xr.getReferenceSpace();
+          const hits = frame.getHitTestResults(hitTestSource);
+          if(hits.length){
+            const pose = hits[0].getPose(refSpace);
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>

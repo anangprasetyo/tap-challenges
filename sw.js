@@ -1,10 +1,10 @@
-// sw.js
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.1.0';
 const APP_CACHE = `tap-cache-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
   './',
   './index.html',
+  './xr.html',
   './manifest.webmanifest',
   './sw.js',
   './icons/icon-192.png',
@@ -40,7 +40,7 @@ self.addEventListener('fetch', (event) => {
         return res;
       }).catch(() => {
         if (req.mode === 'navigate') {
-          return caches.match('/index.html');
+          return caches.match('./index.html');
         }
         return cached;
       });
